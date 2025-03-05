@@ -1,5 +1,5 @@
 ## nekobox-helper
-### The program to simplify interaction with nekobox android client: [NekoBoxForAndroid](https://github.com/MatsuriDayo/NekoBoxForAndroid)
+### A CLI for creating a configuration of the [NekoBoxForAndroid](https://github.com/MatsuriDayo/NekoBoxForAndroid) for separate tunneling and other related utilities
 
 1. Create a nekobox android configuration file for separate tunneling for vless protocol (Only addresses from the file will be proxied).
 
