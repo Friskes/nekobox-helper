@@ -176,7 +176,13 @@ def entering_vless_uri_config() -> tuple[ParseResult, dict[str, str]]:
                     "The vless configuration link is invalid. "
                     f"Missing parameters: {missing_config_params}"
                 )
-                continue
+                if len(missing_config_params) == 1 and "flow" in missing_config_params:
+                    print(
+                        "Missing parameter: flow was created automatically with value: xtls-rprx-vision"
+                    )
+                    vless_config_params["flow"] = "xtls-rprx-vision"
+                else:
+                    continue
         except Exception as exc:
             print("Invalid vless configuration link passed:", str(exc))
             continue
@@ -397,7 +403,7 @@ def run_program_2() -> None:
 
 
 def main() -> None:
-    program_version = "v0.0.2"
+    program_version = "v0.0.3"
     print(
         "Greetings, this program was created by the author: 'https://github.com/Friskes'\n"
         "to simplify interaction with nekobox android client: 'https://github.com/MatsuriDayo/NekoBoxForAndroid'.\n"
