@@ -2,17 +2,18 @@ import configparser
 import ipaddress
 import json
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Generator, Iterable
 from contextlib import suppress
 from functools import partial
+from io import TextIOWrapper
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Sequence
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 from termcolor import colored as C
 
 
-def update_or_create_conf(
+def upd_or_create_wireguard_conf(
     source_ips: list[str], route_rule: str, conf_path: Path | str, output_path: Path | str | None = None
 ) -> None:
     config = configparser.ConfigParser(strict=False)
@@ -20,9 +21,10 @@ def update_or_create_conf(
     config.read(conf_path, encoding="utf-8")
 
     if "Interface" not in config:
-        raise ValueError("The .conf file does not contain a section [Interface]")
+        sys.exit("The .conf file does not contain a section [Interface]")
+
     if "Peer" not in config:
-        raise ValueError("The .conf file does not contain a section [Peer]")
+        sys.exit("The .conf file does not contain a section [Peer]")
 
     config["Peer"]["AllowedIPs"] = ", ".join(source_ips)
 
@@ -47,13 +49,15 @@ def update_or_create_conf(
         config.write(f)
 
 
-def entering_numeric_choice(message: str, expected_programs: Iterable[str]) -> str:
+def input_program(msg: str, expected_programs: Iterable[str]) -> str:
     while True:
-        selected_program = input(C(message, "light_cyan"))
+        selected_program = input(C(msg, "light_cyan"))
+
         if selected_program not in expected_programs:
+            colored_expected_programs = C(f"{expected_programs}", attrs=["underline"])
             print(
                 C(
-                    f"An invalid program has been selected. Programs are allowed: {expected_programs}",
+                    f"An invalid program has been selected. Programs are allowed: {colored_expected_programs}",
                     "red",
                 )
             )
@@ -62,76 +66,78 @@ def entering_numeric_choice(message: str, expected_programs: Iterable[str]) -> s
         return selected_program
 
 
-def entering_ips_file(_format: str, stop_word: bool = False) -> Path | None:
-    input_msg = f"Enter the path to the file with the ip addresses in {_format} format: "
+def input_filepath(file_format: str, stop_word: bool = False) -> Path | None:
     if stop_word:
         input_msg = (
             "Enter N to exit selecting files or "
-            f"Enter the path to the file with the ip addresses in {_format} format: "
+            f"Enter the path to the file with the ip addresses in {file_format} format: "
         )
+    else:
+        input_msg = f"Enter the path to the file with the ip addresses in {file_format} format: "
 
     while True:
-        source_ips_filename = input(C(input_msg, "light_cyan"))
-        if not source_ips_filename:
+        filename = input(C(input_msg, "light_cyan"))
+
+        if not filename:
             print(C("The path to the file with ip addresses cannot be empty.", "red"))
             continue
 
-        if stop_word and source_ips_filename.lower() == "n":
+        if stop_word and filename.lower() == "n":
             return None
 
-        source_ips_filename = Path(source_ips_filename)
-        if not source_ips_filename.is_file():
-            print(C("There is no such file with ip addresses.", "red"))
+        filepath = Path(filename)
+
+        if not filepath.is_file():
+            colored_filename = C(filename, attrs=["underline"])
+            print(C(f"There is no such file with ip addresses: {colored_filename}", "red"))
             continue
 
-        return source_ips_filename
+        return filepath
 
 
-def entering_filename(msg: str, ext: str | None = None) -> Path:
+def input_filepath2(msg: str, ext: str | None = None, check: bool = True) -> Path:
     while True:
-        config_filename = input(C(msg, "light_cyan"))
+        filename = input(C(msg, "light_cyan"))
 
-        if not config_filename:
+        if not filename:
             print(C("The name of the file cannot be empty.", "red"))
             continue
 
-        if ext and (not config_filename.endswith(ext) or len(config_filename) < len(ext) + 1):
-            print(C(f"The name of the file must have an extension {ext}", "red"))
+        if ext and (not filename.endswith(ext) or len(filename) < len(ext) + 1):
+            colored_expected_ext = C(f"{ext}", attrs=["underline"])
+            print(C(f"The name of the file must have an extension {colored_expected_ext}", "red"))
             continue
 
-        return Path(config_filename)
+        filepath = Path(filename)
 
+        if check and not filepath.is_file():
+            colored_filename = C(filename, attrs=["underline"])
+            print(C(f"There is no such file: {colored_filename}", "red"))
+            continue
 
-def choosing_option(filename: Path) -> bool:
-    if not filename.is_file():
-        return True
-
-    while True:
-        decision = input(
-            C(
-                "Such a file already exists. "
-                "Enter: Y if you want to overwrite an existing file. "
-                "Or enter: N to enter another name. ",
-                "light_cyan",
-            )
-        )
-        lowered_decision = decision.lower()
-
-        if lowered_decision == "y":
-            return True
-
-        elif lowered_decision == "n":
-            return False
+        return filepath
 
 
 def get_filename(entering_filename_func: Callable) -> str:
-    filename_ok = False
+    while True:
+        filepath: Path = entering_filename_func()
 
-    while not filename_ok:
-        filename = entering_filename_func()
-        filename_ok = choosing_option(filename)
-
-    return filename
+        if filepath.is_file():
+            overwrite_file = bool(
+                input_program(
+                    C(
+                        "Such a file already exists.\n"
+                        "Select a program:\n"
+                        "0 - if you want to enter another name.\n"
+                        "1 - if you want to overwrite an existing file.\n"
+                        "light_cyan",
+                    ),
+                    ("0", "1"),
+                )
+            )
+            if not overwrite_file:
+                continue
+        return filepath
 
 
 class ExceedingInvalidAddressLimitError(Exception):
@@ -139,12 +145,15 @@ class ExceedingInvalidAddressLimitError(Exception):
 
 
 class IPValidator:
+    comment_prefixes: Sequence[str] = ("#", ";", "//")
+
     def __init__(self, max_invalid: int = 30) -> None:
         self.max_invalid = max_invalid
         self.invalid_count = 0
 
-    def validate(self, value: str) -> bool:
-        if value.startswith("#"):
+    def is_valid(self, value: str) -> bool:
+        if value.startswith(self.comment_prefixes):
+            print(C(f"Duplicate address found, it will be skipped: {value}", "yellow"))
             return False
 
         try:
@@ -167,27 +176,46 @@ class IPValidator:
             return True
 
 
-def read_ips_file(source_ips_filenames: list[Path]) -> list[str]:
+def amnezia_file_reader(ips_file: TextIOWrapper) -> Generator[str, None, None]:
+    try:
+        deserialized_ips = json.load(ips_file)
+    except json.JSONDecodeError as exc:
+        sys.exit(f"Invalid selected file format. Exiting the program. Exception: {type(exc).__name__}")
+    else:
+        for obj in deserialized_ips:
+            yield obj.get("hostname")
+
+
+def plaintext_file_reader(ips_file: TextIOWrapper) -> Generator[str, None, None]:
+    yield from ips_file
+
+
+def read_ips_file(
+    source_ips_filenames: list[Path], reader: Callable[[TextIOWrapper], Generator[str, None, None]]
+) -> list[str]:
     ips_list = []
     ip_validator = IPValidator()
 
     for source_ips_filename in source_ips_filenames:
-        with open(source_ips_filename.name, encoding="utf-8") as source_ips_file:
-            #
-            for line in source_ips_file:
-                cleaned_line = line.strip()
+        with open(source_ips_filename, encoding="utf-8") as ips_file:
+            for ip in reader(ips_file):
+                cleaned_ip = ip.strip()
 
-                if cleaned_line:
+                if cleaned_ip:
                     try:
-                        if not ip_validator.validate(cleaned_line):
+                        if not ip_validator.is_valid(cleaned_ip):
                             continue
                     except ExceedingInvalidAddressLimitError as exc:
-                        sys.exit(f"{exc!s} Exiting the program.")
+                        sys.exit(
+                            f"Failed address limit. Exiting the program. Exception: {type(exc).__name__}"
+                        )
 
-                    if cleaned_line not in ips_list:
-                        ips_list.append(cleaned_line)
+                    if cleaned_ip not in ips_list:
+                        ips_list.append(cleaned_ip)
                     else:
-                        print(C(f"Duplicate address found, it will be skipped {cleaned_line}", "yellow"))
+                        print(C(f"Duplicate address found, it will be skipped: {cleaned_ip}", "yellow"))
+                else:
+                    print(C("Empty address found, it will be skipped", "yellow"))
 
     if not ips_list:
         sys.exit("A file with ip addresses cannot be empty. Exiting the program.")
@@ -244,7 +272,7 @@ def entering_vless_uri_config() -> tuple[ParseResult, dict[str, str]]:
                 else:
                     continue
         except Exception as exc:
-            print(C(f"Invalid vless configuration link passed: {exc!s}", "red"))
+            print(C(f"Invalid vless configuration link passed. Exception: {type(exc).__name__}", "red"))
             continue
         else:
             return vless_config, vless_config_params
@@ -370,15 +398,15 @@ def fill_config_template(
     }
 
 
-def write_config_file(config_filename: str, config_template: dict) -> None:
-    with open(config_filename, "w+", encoding="utf-8") as config_file:
-        json.dump(config_template, config_file, indent=2)
-        config_file.write("\n")
+def write_json_file(filename: Path | str, data: dict | list[dict]) -> None:
+    with open(filename, "w+", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
+        file.write("\n")
 
 
 def entering_amnezia_ips_file() -> Path:
     while True:
-        source_ips_filename = entering_ips_file("amnezia")
+        source_ips_filename = input_filepath("amnezia")
         if not source_ips_filename.name.endswith(".json") or len(source_ips_filename.name) < 6:
             print(C("The name of the ips file must have an extension .json", "red"))
             continue
@@ -386,49 +414,20 @@ def entering_amnezia_ips_file() -> Path:
         return source_ips_filename
 
 
-def read_amnezia_ips_file(source_ips_filename: Path) -> list[dict[str, str]]:
-    while True:
-        with open(source_ips_filename.name, encoding="utf-8") as source_ips_file:
-            ips_list = json.load(source_ips_file)
-
-        if not ips_list:
-            print(C("A file with ip addresses cannot be empty.", "red"))
-            continue
-
-        return ips_list
-
-
-def amnezia_to_plaintext_format(ips_list: list[dict[str, str]]) -> list[str]:
-    plaintext_ips_list = []
-
-    for row in ips_list:
-        hostname = row.get("hostname")
-
-        if hostname:
-            if hostname not in plaintext_ips_list:
-                plaintext_ips_list.append(hostname)
-            else:
-                print(C(f"The 'hostname' already exists, it will be skipped: {hostname}", "yellow"))
-        else:
-            print(C(f"The 'hostname' field is missing in the record: {row}", "yellow"))
-
-    return plaintext_ips_list
-
-
 def plaintext_to_amnezia_format(ips_list: list[str]) -> list[dict[str, str]]:
     return [{"hostname": ip, "ip": ""} for ip in ips_list]
 
 
-def write_ips_file(filename: str, ips: dict) -> None:
+def write_ips_file(filename: Path | str, ips: dict) -> None:
     with open(filename, "w+", encoding="utf-8") as file:
         for ip in ips:
             file.write(f"{ip}\n")
 
 
-def entering_ips_files(_format: str) -> list[Path]:
+def input_ips_files(_format: str) -> list[Path]:
     source_ips_filenames = []
     while True:
-        source_ips_filename = entering_ips_file(_format, stop_word=True)
+        source_ips_filename = input_filepath(_format, stop_word=True)
 
         if source_ips_filename is None:
             if source_ips_filenames:
@@ -445,27 +444,28 @@ def entering_ips_files(_format: str) -> list[Path]:
 def run_program_1() -> None:
     source_ips_filename = entering_amnezia_ips_file()
 
-    entering_filename_func = partial(entering_filename, msg="Enter a name for the plaintext file: ")
-    plaintext_ips_filename = get_filename(entering_filename_func)
+    plaintext_ips_filename = get_filename(
+        partial(input_filepath2, msg="Enter a name for the new plaintext file: ", check=False)
+    )
 
-    ips_list = read_amnezia_ips_file(source_ips_filename)
-    ips_list = amnezia_to_plaintext_format(ips_list)
+    ips_list = read_ips_file([source_ips_filename], reader=amnezia_file_reader)
     write_ips_file(plaintext_ips_filename, ips_list)
 
     print(C("The file with ip addresses in plaintext format has been successfully created.", "green"))
 
 
 def run_program_2() -> None:
-    source_ips_filename = entering_ips_file("plaintext")
+    source_ips_filename = input_filepath("plaintext")
 
-    entering_filename_func = partial(
-        entering_filename, msg="Enter a name for the amnezia json file: ", ext=".json"
+    amnezia_ips_filename = get_filename(
+        partial(
+            input_filepath2, msg="Enter a name for the new amnezia json file: ", ext=".json", check=False
+        )
     )
-    amnezia_ips_filename = get_filename(entering_filename_func)
 
-    ips_list = read_ips_file([source_ips_filename])
+    ips_list = read_ips_file([source_ips_filename], reader=plaintext_file_reader)
     ips_list = plaintext_to_amnezia_format(ips_list)
-    write_ips_file(amnezia_ips_filename, ips_list)
+    write_json_file(amnezia_ips_filename, ips_list)
 
     print(C("The file with ip addresses in amnezia json format has been successfully created.", "green"))
 
@@ -476,54 +476,45 @@ def run_program_3() -> None:
         "1 - Combine files in the plaintext format.\n"
         "2 - Combine files in the amnezia format.\n"
     )
-    route_rule = entering_numeric_choice(message, ("1", "2"))
+    route_rule = input_program(message, ("1", "2"))
 
     if route_rule == "1":
-        source_ips_filenames = entering_ips_files("plaintext")
+        source_ips_filenames = input_ips_files("plaintext")
 
         print(
             C(
-                f"Selected ip address files: {[source_ip.name for source_ip in source_ips_filenames]}",
+                f"Selected ip address files: {[str(filepath) for filepath in source_ips_filenames]}",
                 "green",
             )
         )
 
-        source_ips = read_ips_file(source_ips_filenames)
+        source_ips = read_ips_file(source_ips_filenames, reader=plaintext_file_reader)
 
-        entering_filename_func = partial(entering_filename, msg="Enter a name for the new ips file: ")
-        new_filename = get_filename(entering_filename_func)
+        new_filename = get_filename(
+            partial(input_filepath2, msg="Enter a name for the new ips file: ", check=False)
+        )
 
         write_ips_file(new_filename, source_ips)
 
     elif route_rule == "2":
-        source_ips_filenames = entering_ips_files("amnezia")
+        source_ips_filenames = input_ips_files("amnezia")
 
         print(
             C(
-                f"Selected ip address files: {[source_ip.name for source_ip in source_ips_filenames]}",
+                f"Selected ip address files: {[str(filepath) for filepath in source_ips_filenames]}",
                 "green",
             )
         )
 
-        source_ips: list[dict[str, str]] = []
-        for source_ips_filename in source_ips_filenames:
-            ips_list = read_amnezia_ips_file(source_ips_filename)
-            source_ips.extend(ips_list)
+        source_ips = read_ips_file(source_ips_filenames, reader=amnezia_file_reader)
 
-        ips = []
-        tmp_ips = []
-        for ip in source_ips:
-            hostname = ip.get("hostname")
-            if hostname and hostname not in tmp_ips:
-                ips.append(ip)
-                tmp_ips.append(hostname)
+        source_ips = [{"hostname": ip, "ip": ""} for ip in source_ips]
 
-        entering_filename_func = partial(
-            entering_filename, msg="Enter a name for the new ips file: ", ext=".json"
+        new_filename = get_filename(
+            partial(input_filepath2, msg="Enter a name for the new ips file: ", ext=".json", check=False)
         )
-        new_filename = get_filename(entering_filename_func)
 
-        write_config_file(new_filename, ips)
+        write_json_file(new_filename, source_ips)
 
     print(C("The file with ip addresses has been successfully created.", "green"))
 
@@ -534,43 +525,53 @@ def run_program_4() -> None:
         "1 - Create a file for proxying the specified ip addresses.\n"
         "2 - Create a file for proxying all ip addresses.\n"
     )
-    route_rule = entering_numeric_choice(message, ("1", "2"))
+    route_rule = input_program(message, ("1", "2"))
 
     if route_rule == "2":
         source_ips = ["0.0.0.0/0", "::/0"]
-        route_rule = "3"
 
     elif route_rule == "1":
-        source_ips_filenames = entering_ips_files("plaintext")
+        source_ips_filenames = input_ips_files("plaintext")
 
         print(
             C(
-                f"Selected ip address files: {[source_ip.name for source_ip in source_ips_filenames]}",
+                f"Selected ip address files: {[str(filepath) for filepath in source_ips_filenames]}",
                 "green",
             )
         )
 
-        source_ips = read_ips_file(source_ips_filenames)
+        source_ips = read_ips_file(source_ips_filenames, reader=plaintext_file_reader)
 
-        message = "Select a your vpn client:\n1 - Amnezia\n2 - WireSock\n3 - Other clients\n"
-        route_rule = entering_numeric_choice(message, ("1", "2", "3"))
+    message = "Select a your vpn client:\n1 - Amnezia\n2 - WireSock\n3 - Other clients\n"
+    route_rule = input_program(message, ("1", "2", "3"))
 
-    config_filename = entering_filename(
-        msg="Enter a name for the existing configuration file: ", ext=".conf"
+    config_filename = input_filepath2(
+        msg="Enter a name for the existing configuration file for copying: ", ext=".conf"
     )
 
-    entering_filename_func = partial(
-        entering_filename, msg="Enter a name for the new configuration file: ", ext=".conf"
+    new_config_filename = get_filename(
+        partial(
+            input_filepath2,
+            msg="Enter a name for the new configuration file: ",
+            ext=".conf",
+            check=False,
+        )
     )
-    new_config_filename = get_filename(entering_filename_func)
 
-    update_or_create_conf(source_ips, route_rule, config_filename, new_config_filename)
+    upd_or_create_wireguard_conf(source_ips, route_rule, config_filename, new_config_filename)
 
     print(C("The configuration file has been created successfully.", "green"))
 
 
 def run_program_5() -> None:
-    source_ips_filename = entering_ips_file("plaintext")
+    source_ips_filenames = input_ips_files("plaintext")
+
+    print(
+        C(
+            f"Selected ip address files: {[str(filepath) for filepath in source_ips_filenames]}",
+            "green",
+        )
+    )
 
     message = (
         "Select a program:\n"
@@ -579,17 +580,21 @@ def run_program_5() -> None:
         "2 - Create a file for NOT proxying the specified ip addresses.\n"
         "(selected ips -> outbound 'direct', other ips -> outbound 'proxy').\n"
     )
-    route_rule = entering_numeric_choice(message, ("1", "2"))
+    route_rule = input_program(message, ("1", "2"))
 
-    entering_filename_func = partial(
-        entering_filename, msg="Enter a name for the new nekobox configuration file: ", ext=".json"
+    config_filename = get_filename(
+        partial(
+            input_filepath2,
+            msg="Enter a name for the new nekobox configuration file: ",
+            ext=".json",
+            check=False,
+        )
     )
-    config_filename = get_filename(entering_filename_func)
 
-    ips_list = read_ips_file([source_ips_filename])
+    source_ips = read_ips_file(source_ips_filenames, reader=plaintext_file_reader)
     vless_config, vless_config_params = entering_vless_uri_config()
-    config_template = fill_config_template(vless_config, vless_config_params, ips_list, route_rule)
-    write_config_file(config_filename, config_template)
+    config_template = fill_config_template(vless_config, vless_config_params, source_ips, route_rule)
+    write_json_file(config_filename, config_template)
 
     print(C("The configuration file has been created successfully.", "green"))
 
@@ -615,7 +620,7 @@ def main() -> None:
         "5 - Create a nekobox android configuration file for separate tunneling for vless protocol.\n"
     )
 
-    selected_program = entering_numeric_choice(message, ("1", "2", "3", "4", "5"))
+    selected_program = input_program(message, ("1", "2", "3", "4", "5"))
     match selected_program:
         case "1":
             run_program_1()
