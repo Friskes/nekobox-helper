@@ -33,8 +33,8 @@ Tunneling options:
 ---
 
 #### Launch
-To run the program on Windows, you can use the file: `vpn_configurator_vX.X.X.exe`
-To run the program on MacOS, you can use the file: `vpn_configurator_vX.X.X`
+To run the program on Windows, you can use the file: `windows/vpn_configurator_vX.X.X.exe`
+To run the program on MacOS, you can use the file: `macos/vpn_configurator_vX.X.X`
 
 If you have a python interpreter on your system, you can use the file to run program: `vpn_configurator.py`
 
