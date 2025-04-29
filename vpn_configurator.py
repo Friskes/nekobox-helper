@@ -124,19 +124,17 @@ def get_filename(entering_filename_func: Callable) -> str:
         filepath: Path = entering_filename_func()
 
         if filepath.is_file():
-            overwrite_file = bool(
-                input_program(
-                    C(
-                        "Such a file already exists.\n"
-                        "Select a program:\n"
-                        "0 - if you want to enter another name.\n"
-                        "1 - if you want to overwrite an existing file.\n"
-                        "light_cyan",
-                    ),
-                    ("0", "1"),
-                )
+            selected_program = input_program(
+                C(
+                    "Such a file already exists.\n"
+                    "Select a program:\n"
+                    "0 - if you want to enter another name.\n"
+                    "1 - if you want to overwrite an existing file.\n",
+                    "light_cyan",
+                ),
+                ("0", "1"),
             )
-            if not overwrite_file:
+            if selected_program == "0":
                 continue
         return filepath
 
