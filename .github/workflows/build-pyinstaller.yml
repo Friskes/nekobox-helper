@@ -118,10 +118,9 @@ jobs:
           path: vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
 
   publish-release:
+    if: github.actor == 'Friskes'
     needs: [build-windows, build-macos-x86]
     runs-on: ubuntu-latest
-    environment:
-      name: release
     steps:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
