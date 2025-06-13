@@ -7,8 +7,12 @@ on:
         description: "Release version"
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
+    if: github.actor == 'Friskes'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
@@ -60,6 +64,7 @@ jobs:
           path: vpn_configurator_v${{ github.event.inputs.version }}.exe
 
   build-macos-x86:
+    if: github.actor == 'Friskes'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
@@ -115,6 +120,8 @@ jobs:
   publish-release:
     needs: [build-windows, build-macos-x86]
     runs-on: ubuntu-latest
+    environment:
+      name: release
     steps:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
