@@ -1,4 +1,4 @@
 -r requirements.txt
 
 pyinstaller==6.13.0
-lipo==1.2.2
+# lipo==1.2.2
