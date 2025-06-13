@@ -41,17 +41,14 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-dependencies.outputs.cache-hit != 'true'
-        shell: cmd
         run: |
           python -m venv venv
-          venv\Scripts\activate
-          pip install --upgrade pip
-          pip install -r requirements_dev.txt
+          venv\Scripts\pip install --upgrade pip
+          venv\Scripts\pip install -r requirements_dev.txt
 
       - name: Build Windows binary
         run: |
-          venv\Scripts\activate
-          pyinstaller -F vpn_configurator.py
+          venv\Scripts\pyinstaller -F vpn_configurator.py
 
       - name: Rename binary with version
         run: |
