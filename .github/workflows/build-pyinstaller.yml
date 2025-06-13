@@ -44,13 +44,13 @@ jobs:
         shell: cmd
         run: |
           python -m venv venv
-          call venv\Scripts\activate
+          venv\Scripts\activate
           pip install --upgrade pip
           pip install -r requirements_dev.txt
 
       - name: Build Windows binary
         run: |
-          call venv\Scripts\activate
+          venv\Scripts\activate
           pyinstaller -F vpn_configurator.py
 
       - name: Rename binary with version
@@ -108,7 +108,7 @@ jobs:
 
       - name: Rename binary with version
         run: |
-          mv dist/vpn_configurator.macos-x86_64 vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
+          mv dist/vpn_configurator vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
 
       - uses: actions/upload-artifact@v4
         with:
