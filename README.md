@@ -33,11 +33,22 @@ Tunneling options:
 ---
 
 #### Launch
-To run the program on Windows, you can use the file: `windows/vpn_configurator_vX.X.X.exe`
-To run the program on MacOS, you can use the file: `macos/vpn_configurator_vX.X.X`
+- To run the program on Windows, you can use the file: `windows/vpn_configurator_vX.X.X.exe`
+- To run the program on MacOS, you can use the file: `macos/vpn_configurator_vX.X.X`
+> Before running on macOS, you may need to give permissions to run the file:
+```bash
+chmod +x vpn_configurator_vX.X.X
+xattr -d com.apple.quarantine vpn_configurator_vX.X.X
+```
 
-If you have a python interpreter on your system, you can use the file to run program: `vpn_configurator.py`
-
+- If you have a python interpreter on your system, you can use the file to run program: `vpn_configurator.py`
+> Before running the python script, you need to run several commands:
+```bash
+python3 -m venv venv
+. venv/bin/activate
+pip3 install -r requirements.txt
+python vpn_configurator.py
+```
 ---
 
 #### Import in the amnezia desktop/android app

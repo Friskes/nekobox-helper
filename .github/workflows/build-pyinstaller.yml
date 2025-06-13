@@ -1,0 +1,85 @@
+name: Build PyInstaller Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version"
+        required: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          python-version-file: '.python-version'
+
+      - uses: actions/cache@v3
+        id: cache-dependencies
+        with:
+          path: |
+            venv
+          key: ${{ runner.os }}-venv-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/*requirements_dev.txt') }}
+
+      - name: Install dependencies
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements_dev.txt
+
+      - name: Build Windows binary
+        run: pyinstaller -F vpn_configurator.py
+
+      - name: Rename binary with version
+        run: |
+          mv dist/vpn_configurator.exe vpn_configurator_v${{ github.event.inputs.version }}.exe
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: vpn_configurator_windows
+          path: vpn_configurator_v${{ github.event.inputs.version }}.exe
+
+  build-macos-x86:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          python-version-file: '.python-version'
+
+      - uses: actions/cache@v3
+        id: cache-dependencies
+        with:
+          path: |
+            venv
+          key: ${{ runner.os }}-venv-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/*requirements_dev.txt') }}
+
+      - name: Install dependencies
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements_dev.txt
+
+      - name: Build macOS binary
+        run: pyinstaller -F vpn_configurator.py
+
+      - name: Rename binary with version
+        run: |
+          mv dist/vpn_configurator.macos-x86_64 vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: vpn_configurator_macos_x86_64
+          path: vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
