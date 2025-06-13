@@ -111,3 +111,28 @@ jobs:
         with:
           name: vpn_configurator_macos_x86_64
           path: vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
+
+  publish-release:
+    needs: [build-windows, build-macos-x86]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vpn_configurator_windows
+          path: artifacts/
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vpn_configurator_macos_x86_64
+          path: artifacts/
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: Release v${{ github.event.inputs.version }}
+          files: |
+            artifacts/vpn_configurator_v${{ github.event.inputs.version }}.exe
+            artifacts/vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
