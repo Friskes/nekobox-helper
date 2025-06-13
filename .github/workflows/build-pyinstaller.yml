@@ -13,6 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Check if artifact already exists in releases
+        run: |
+          VERSION=vpn_configurator_v${{ github.event.inputs.version }}.exe
+          echo "Checking if release contains $VERSION"
+          EXISTS=$(curl -s -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            | jq -e '.[] | select(.assets[].name == "'$VERSION'")' > /dev/null && echo yes || echo no)
+          if [ "$EXISTS" = "yes" ]; then
+            echo "Artifact already exists. Skipping build."
+            exit 0
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v4
         id: setup-python
@@ -41,7 +53,7 @@ jobs:
         run: |
           mv dist/vpn_configurator.exe vpn_configurator_v${{ github.event.inputs.version }}.exe
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: vpn_configurator_windows
           path: vpn_configurator_v${{ github.event.inputs.version }}.exe
@@ -50,6 +62,18 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+
+      - name: Check if artifact already exists in releases
+        run: |
+          VERSION=vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
+          echo "Checking if release contains $VERSION"
+          EXISTS=$(curl -s -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            | jq -e '.[] | select(.assets[].name == "'$VERSION'")' > /dev/null && echo yes || echo no)
+          if [ "$EXISTS" = "yes" ]; then
+            echo "Artifact already exists. Skipping build."
+            exit 0
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -79,7 +103,7 @@ jobs:
         run: |
           mv dist/vpn_configurator.macos-x86_64 vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: vpn_configurator_macos_x86_64
           path: vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
