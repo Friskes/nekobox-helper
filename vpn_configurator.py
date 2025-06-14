@@ -27,6 +27,8 @@ def upd_or_create_wireguard_conf(
         sys.exit("The .conf file does not contain a section [Peer]")
 
     config["Peer"]["AllowedIPs"] = ", ".join(source_ips)
+    # TODO(Ars): Сделать поддержку адресов для игнора
+    config["Peer"]["DisallowedIPs"]
 
     match route_rule:
         case "1":
@@ -599,13 +601,10 @@ def run_program_5() -> None:
 
 
 def main() -> None:
-    program_version = "v0.1.0"
-
     print(
         C(
             "Greetings, this program was created by the author: 'https://github.com/Friskes'\n"
             "to simplify the creation of configurations for vpn clients.\n"
-            f"{program_version}\n",
             "light_magenta",
         )
     )

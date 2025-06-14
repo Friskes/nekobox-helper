@@ -34,10 +34,11 @@ Tunneling options:
 
 #### Launch
 - To run the program on Windows or MacOS, you can use the latest file for you cpu architecture from [releases](https://github.com/Friskes/vpn-configurator/releases/latest)
-> Before running on macOS, you may need to give permissions to run the file:
+> Use the terminal program to launch the file.
+
+> **Before running on macOS, you may need to give permissions to run the file**:
 ```bash
 chmod +x vpn_configurator_vX.X.X
-xattr -d com.apple.quarantine vpn_configurator_vX.X.X
 ```
 
 - If you have a python interpreter on your system, you can use the source code file to run program: `vpn_configurator.py`
