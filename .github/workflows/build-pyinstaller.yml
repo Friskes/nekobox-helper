@@ -118,7 +118,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vpn_configurator_macos_x86_64
+          name: vpn_configurator_macos_arm64
           path: vpn_configurator_v${{ github.event.inputs.version }}.macos-arm64
 
   build-macos-x86_64:
