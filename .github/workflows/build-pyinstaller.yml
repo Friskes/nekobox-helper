@@ -52,7 +52,7 @@ jobs:
 
       - name: Build Windows binary
         run: |
-          venv\Scripts\pyinstaller -F vpn_configurator.py
+          venv\Scripts\pyinstaller -c -F vpn_configurator.py
 
       - name: Rename binary with version
         run: |
@@ -106,7 +106,7 @@ jobs:
       - name: Build macOS arm64 binary
         run: |
           . venv/bin/activate
-          pyinstaller -F vpn_configurator.py
+          pyinstaller -c -F vpn_configurator.py
 
       - name: Check binary architecture
         run: |
@@ -168,7 +168,7 @@ jobs:
       - name: Build macOS x86_64 binary
         run: |
           . venv/bin/activate
-          arch -x86_64 pyinstaller -F vpn_configurator.py
+          arch -x86_64 pyinstaller -c -F vpn_configurator.py
 
       - name: Check binary architecture
         run: |
