@@ -63,7 +63,7 @@ jobs:
           name: vpn_configurator_windows
           path: vpn_configurator_v${{ github.event.inputs.version }}.exe
 
-  build-macos-x86:
+  build-macos-arm64:
     if: github.actor == 'Friskes'
     runs-on: macos-latest
     steps:
@@ -72,7 +72,7 @@ jobs:
       - name: Check if artifact already exists in releases
         shell: bash
         run: |
-          VERSION=vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
+          VERSION=vpn_configurator_v${{ github.event.inputs.version }}.macos-arm64
           echo "Checking if release contains $VERSION"
           EXISTS=$(curl -s -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
@@ -103,10 +103,76 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements_dev.txt
 
-      - name: Build macOS binary
+      - name: Build macOS arm64 binary
         run: |
           . venv/bin/activate
           pyinstaller -F vpn_configurator.py
+
+      - name: Check binary architecture
+        run: |
+          file dist/vpn_configurator
+
+      - name: Rename binary with version
+        run: |
+          mv dist/vpn_configurator vpn_configurator_v${{ github.event.inputs.version }}.macos-arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vpn_configurator_macos_x86_64
+          path: vpn_configurator_v${{ github.event.inputs.version }}.macos-arm64
+
+  build-macos-x86_64:
+    if: github.actor == 'Friskes'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check if artifact already exists in releases
+        shell: bash
+        run: |
+          VERSION=vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
+          echo "Checking if release contains $VERSION"
+          EXISTS=$(curl -s -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            | jq -e '.[] | select(.assets[].name == "'$VERSION'")' > /dev/null && echo yes || echo no)
+          if [ "$EXISTS" = "yes" ]; then
+            echo "Artifact already exists. Skipping build."
+            exit 0
+          fi
+
+      - name: Install Rosetta 2
+        run: |
+          /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        id: setup-python
+        with:
+          python-version-file: '.python-version'
+
+      - uses: actions/cache@v3
+        id: cache-dependencies
+        with:
+          path: |
+            venv
+          key: ${{ runner.os }}-venv-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/*requirements_dev.txt') }}
+
+      - name: Install dependencies
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements_dev.txt
+
+      - name: Build macOS x86_64 binary
+        run: |
+          . venv/bin/activate
+          arch -x86_64 pyinstaller -F vpn_configurator.py
+
+      - name: Check binary architecture
+        run: |
+          file dist/vpn_configurator
 
       - name: Rename binary with version
         run: |
@@ -119,7 +185,7 @@ jobs:
 
   publish-release:
     if: github.actor == 'Friskes'
-    needs: [build-windows, build-macos-x86]
+    needs: [build-windows, build-macos-arm64, build-macos-x86_64]
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
@@ -128,7 +194,13 @@ jobs:
           name: vpn_configurator_windows
           path: artifacts/
 
-      - name: Download macOS artifact
+      - name: Download macOS arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vpn_configurator_macos_arm64
+          path: artifacts/
+
+      - name: Download macOS x86_64 artifact
         uses: actions/download-artifact@v4
         with:
           name: vpn_configurator_macos_x86_64
@@ -141,4 +213,5 @@ jobs:
           name: Release v${{ github.event.inputs.version }}
           files: |
             artifacts/vpn_configurator_v${{ github.event.inputs.version }}.exe
+            artifacts/vpn_configurator_v${{ github.event.inputs.version }}.macos-arm64
             artifacts/vpn_configurator_v${{ github.event.inputs.version }}.macos-x86_64
