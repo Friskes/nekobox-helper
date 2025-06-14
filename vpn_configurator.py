@@ -27,8 +27,9 @@ def upd_or_create_wireguard_conf(
         sys.exit("The .conf file does not contain a section [Peer]")
 
     config["Peer"]["AllowedIPs"] = ", ".join(source_ips)
+
     # TODO(Ars): Сделать поддержку адресов для игнора
-    config["Peer"]["DisallowedIPs"]
+    # config["Peer"]["DisallowedIPs"]
 
     match route_rule:
         case "1":
