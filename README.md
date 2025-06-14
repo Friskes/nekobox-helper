@@ -34,7 +34,7 @@ Tunneling options:
 
 #### Launch
 - To run the program on Windows or MacOS, you can use the latest file for you cpu architecture from [releases](https://github.com/Friskes/vpn-configurator/releases/latest)
-> Use the terminal program to launch the file.
+> Use the *terminal* program to launch the file on MacOS **not** *console* program.
 
 > **Before running on macOS, you may need to give permissions to run the file**:
 ```bash
